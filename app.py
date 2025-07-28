@@ -23,42 +23,63 @@ VERIFY_TOKEN = os.getenv('VERIFY_TOKEN')
 def verify_webhook():
     """
     Webhook verification endpoint that Facebook will hit to verify your webhook.
+    This endpoint is required by Facebook to verify ownership of the webhook.
     """
+    # Parse params from the webhook verification request
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
     
+    # Check if a token and mode were sent
     if mode and token:
+        # Check the mode and token sent are correct
         if mode == 'subscribe' and token == VERIFY_TOKEN:
+            # Respond with 200 OK and challenge token from the request
             print('WEBHOOK_VERIFIED')
             return challenge, 200
         else:
+            # Responds with '403 Forbidden' if verify tokens do not match
+            print('VERIFICATION_FAILED')
             return 'Verification token mismatch', 403
-    return 'Bad Request', 400
+    else:
+        # Responds with '400 Bad Request' if mode or token are missing
+        print('MISSING_PARAMETER')
+        return 'Bad Request: Missing required parameters', 400
 
 # Webhook endpoint for receiving messages
 @app.post('/webhook')
 def webhook():
     """
     Endpoint for receiving WhatsApp messages.
+    This endpoint receives all incoming messages from WhatsApp.
     """
-    data = request.get_json()
-    
-    # Check if this is a WhatsApp message
-    if 'object' in data and 'entry' in data:
-        try:
+    # Parse the request body from the POST
+    try:
+        data = request.get_json()
+        
+        # Check if this is a WhatsApp message
+        if data.get('object') and 'entry' in data:
+            # Get the webhook event
             for entry in data['entry']:
                 for change in entry.get('changes', []):
                     value = change.get('value')
                     if 'messages' in value:
                         for message in value['messages']:
+                            # Handle different message types
                             if message['type'] == 'text':
                                 handle_message(message)
-            return jsonify({'status': 'ok'}), 200
-        except Exception as e:
-            print(f"Error processing webhook: {e}")
-            return jsonify({'status': 'error', 'message': str(e)}), 500
-    return jsonify({'status': 'error', 'message': 'Invalid request'}), 400
+                            else:
+                                print(f"Received unsupported message type: {message['type']}")
+                                
+                        # Return a 200 OK response to acknowledge receipt of the message
+                        return jsonify({'status': 'ok'}), 200
+        
+        # If the request is not a WhatsApp message, return an error
+        return jsonify({'status': 'error', 'message': 'Not a WhatsApp API event'}), 404
+        
+    except Exception as e:
+        print(f"Error processing webhook: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 def handle_message(message):
     """
