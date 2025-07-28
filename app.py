@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+from datetime import datetime
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import openai
@@ -171,7 +172,6 @@ def test():
     }), 200
 
 if __name__ == '__main__':
-    from datetime import datetime
     port = int(os.environ.get('PORT', 5000))
     print(f"Starting server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')
