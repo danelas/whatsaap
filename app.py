@@ -16,7 +16,7 @@ openai.api_key = os.getenv('OPENAI_API_KEY')
 # WhatsApp API configuration
 WHATSAPP_TOKEN = os.getenv('WHATSAPP_TOKEN')
 WHATSAPP_PHONE_NUMBER_ID = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
-VERIFY_TOKEN = os.getenv('VERIFY_TOKEN')
+VERIFY_TOKEN = os.getenv('VERIFY_TOKEN', 'mySecretVerifyToken2024')  # Default value matches Facebook
 
 # Webhook verification endpoint
 @app.get('/webhook')
