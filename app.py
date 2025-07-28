@@ -1,10 +1,15 @@
 import os
 import json
 import requests
+import logging
 from datetime import datetime
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import openai
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -24,27 +29,29 @@ VERIFY_TOKEN = os.getenv('VERIFY_TOKEN', 'mySecretVerifyToken2024')  # Default v
 def verify_webhook():
     """
     Webhook verification endpoint that Facebook will hit to verify your webhook.
-    This endpoint is required by Facebook to verify ownership of the webhook.
     """
+    logger.info("=== Webhook Verification Request ===")
+    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"Args: {dict(request.args)}")
+    
     # Parse params from the webhook verification request
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
     
+    logger.info(f"Mode: {mode}, Token: {token}, Challenge: {challenge}")
+    
     # Check if a token and mode were sent
     if mode and token:
         # Check the mode and token sent are correct
         if mode == 'subscribe' and token == VERIFY_TOKEN:
-            # Respond with 200 OK and challenge token from the request
-            print('WEBHOOK_VERIFIED')
+            logger.info("Webhook verified successfully!")
             return challenge, 200
         else:
-            # Responds with '403 Forbidden' if verify tokens do not match
-            print('VERIFICATION_FAILED')
+            logger.error(f"Verification failed. Token mismatch. Expected: {VERIFY_TOKEN}, Got: {token}")
             return 'Verification token mismatch', 403
     else:
-        # Responds with '400 Bad Request' if mode or token are missing
-        print('MISSING_PARAMETER')
+        logger.error("Missing required parameters")
         return 'Bad Request: Missing required parameters', 400
 
 # Webhook endpoint for receiving messages
@@ -52,34 +59,48 @@ def verify_webhook():
 def webhook():
     """
     Endpoint for receiving WhatsApp messages.
-    This endpoint receives all incoming messages from WhatsApp.
     """
-    # Parse the request body from the POST
+    logger.info("\n=== Incoming Webhook Request ===")
+    logger.info(f"Headers: {dict(request.headers)}")
+    
+    # Log the raw request data
     try:
         data = request.get_json()
+        logger.info(f"Request data: {json.dumps(data, indent=2)}")
         
         # Check if this is a WhatsApp message
-        if data.get('object') and 'entry' in data:
-            # Get the webhook event
-            for entry in data['entry']:
-                for change in entry.get('changes', []):
-                    value = change.get('value')
-                    if 'messages' in value:
-                        for message in value['messages']:
-                            # Handle different message types
-                            if message['type'] == 'text':
-                                handle_message(message)
-                            else:
-                                print(f"Received unsupported message type: {message['type']}")
-                                
-                        # Return a 200 OK response to acknowledge receipt of the message
-                        return jsonify({'status': 'ok'}), 200
+        if not data or 'object' not in data or 'entry' not in data:
+            logger.error("Invalid request format")
+            return jsonify({'status': 'error', 'message': 'Invalid request format'}), 400
+            
+        # Process each entry (there may be multiple if batched)
+        for entry in data['entry']:
+            logger.info(f"Processing entry: {entry.get('id')}")
+            
+            # Process each change in the entry
+            for change in entry.get('changes', []):
+                value = change.get('value')
+                logger.info(f"Processing change: {change.get('field')}")
+                
+                # Handle messages
+                if 'messages' in value:
+                    for message in value['messages']:
+                        logger.info(f"Processing message: {message.get('id')}")
+                        logger.info(f"Message type: {message.get('type')}")
+                        logger.info(f"From: {message.get('from')}")
+                        
+                        # Handle text messages
+                        if message['type'] == 'text':
+                            logger.info(f"Text message: {message.get('text', {}).get('body')}")
+                            handle_message(message)
+                        else:
+                            logger.warning(f"Unsupported message type: {message.get('type')}")
         
-        # If the request is not a WhatsApp message, return an error
-        return jsonify({'status': 'error', 'message': 'Not a WhatsApp API event'}), 404
+        # Always return a 200 OK response to acknowledge receipt of the message
+        return jsonify({'status': 'ok'}), 200
         
     except Exception as e:
-        print(f"Error processing webhook: {e}")
+        logger.error(f"Error processing webhook: {str(e)}", exc_info=True)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 def handle_message(message):
@@ -165,11 +186,18 @@ def send_whatsapp_message(recipient_phone, message_text):
 # Test endpoint to verify the server is running
 @app.get('/')
 def test():
-    return jsonify({
+    logger.info("Test endpoint hit")
+    response = {
         'status': 'running',
         'service': 'whatsapp-bot',
-        'timestamp': datetime.utcnow().isoformat()
-    }), 200
+        'timestamp': datetime.utcnow().isoformat(),
+        'environment': {
+            'whatsapp_configured': bool(WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID),
+            'openai_configured': bool(openai.api_key)
+        }
+    }
+    logger.info(f"Test response: {response}")
+    return jsonify(response), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
