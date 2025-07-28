@@ -161,6 +161,17 @@ def send_whatsapp_message(recipient_phone, message_text):
             print(f"Response content: {e.response.text}")
         return None
 
+# Test endpoint to verify the server is running
+@app.get('/')
+def test():
+    return jsonify({
+        'status': 'running',
+        'service': 'whatsapp-bot',
+        'timestamp': datetime.utcnow().isoformat()
+    }), 200
+
 if __name__ == '__main__':
+    from datetime import datetime
     port = int(os.environ.get('PORT', 5000))
+    print(f"Starting server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')
